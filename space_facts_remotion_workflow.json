@@ -1,0 +1,272 @@
+{
+  "name": "Space Facts Autopilot — Remotion Version",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {"field": "cronExpression", "expression": "0 13 * * *"},
+            {"field": "cronExpression", "expression": "0 16 * * *"},
+            {"field": "cronExpression", "expression": "0 19 * * *"},
+            {"field": "cronExpression", "expression": "0 22 * * *"},
+            {"field": "cronExpression", "expression": "0 1 * * *"}
+          ]
+        }
+      },
+      "id": "n1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=PASTE_GEMINI_KEY_HERE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Find one surprising verified space fact that is underreported or mind-blowing. Return ONLY valid JSON with no markdown or code fences: {\\\"fact\\\": \\\"\\\", \\\"source\\\": \\\"\\\", \\\"keywords\\\": [\\\"word1\\\", \\\"word2\\\", \\\"word3\\\"]}\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"maxOutputTokens\": 300,\n    \"temperature\": 0.9\n  }\n}",
+        "options": {}
+      },
+      "id": "n2",
+      "name": "Gemini Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = items[0].json.candidates[0].content.parts[0].text;\nconst clean = raw.replace(/```json/g,'').replace(/```/g,'').trim();\nlet parsed;\ntry { parsed = JSON.parse(clean); }\ncatch(e) { throw new Error('Gemini research parse error: ' + clean.substring(0,200)); }\nreturn [{ json: {\n  fact: parsed.fact || '',\n  source: parsed.source || '',\n  keywords: Array.isArray(parsed.keywords) ? parsed.keywords : []\n}}];"
+      },
+      "id": "n3",
+      "name": "Parse Research",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=PASTE_GEMINI_KEY_HERE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"You are Dr. Cosmos, an enthusiastic space scientist. Write a 60-second YouTube Shorts script based on this fact: {{ $json.fact }}. Rules: Hook grabs attention in first 3 seconds. Simple language. High energy. End with a question. Return ONLY valid JSON no markdown: {\\\"hook\\\": \\\"\\\", \\\"body\\\": \\\"\\\", \\\"cta\\\": \\\"\\\"}\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"maxOutputTokens\": 600,\n    \"temperature\": 0.8\n  }\n}",
+        "options": {}
+      },
+      "id": "n4",
+      "name": "Gemini Script",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = items[0].json.candidates[0].content.parts[0].text;\nconst clean = raw.replace(/```json/g,'').replace(/```/g,'').trim();\nlet parsed;\ntry { parsed = JSON.parse(clean); }\ncatch(e) { throw new Error('Gemini script parse error: ' + clean.substring(0,200)); }\nconst prev = $('Parse Research').item.json;\nreturn [{ json: {\n  hook: parsed.hook || '',\n  body: parsed.body || '',\n  cta: parsed.cta || '',\n  full_script: (parsed.hook || '') + ' ' + (parsed.body || '') + ' ' + (parsed.cta || ''),\n  fact: prev.fact,\n  source: prev.source,\n  keywords: prev.keywords\n}}];"
+      },
+      "id": "n5",
+      "name": "Parse Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "x-api-key", "value": "PASTE_CLAUDE_KEY_HERE"},
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 800,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a YouTube and TikTok SEO expert. Given this script: {{ $json.full_script }} and keywords: {{ $json.keywords.join(', ') }}. Return ONLY valid JSON no markdown: {\\\"title\\\": \\\"\\\", \\\"description\\\": \\\"\\\", \\\"tags\\\": [], \\\"hook_rewrite\\\": \\\"\\\", \\\"tiktok_caption\\\": \\\"\\\"}. Rules: title under 60 chars high CTR. description under 150 chars. tags array of 10 strings. hook_rewrite must be punchier. tiktok_caption under 150 chars with 5 hashtags.\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "n6",
+      "name": "Claude SEO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = items[0].json.content[0].text;\nconst clean = raw.replace(/```json/g,'').replace(/```/g,'').trim();\nlet seo;\ntry { seo = JSON.parse(clean); }\ncatch(e) { throw new Error('Claude parse error: ' + clean.substring(0,200)); }\nconst script = $('Parse Script').item.json;\nreturn [{ json: {\n  title: seo.title || '',\n  description: seo.description || '',\n  tags: Array.isArray(seo.tags) ? seo.tags : [],\n  hook_rewrite: seo.hook_rewrite || script.hook,\n  tiktok_caption: seo.tiktok_caption || '',\n  hook: script.hook,\n  body: script.body,\n  cta: script.cta,\n  full_script: script.full_script,\n  fact: script.fact,\n  source: script.source,\n  keywords: script.keywords,\n  created_at: new Date().toISOString()\n}}];"
+      },
+      "id": "n7",
+      "name": "Merge All Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appOzlt0lqR510YZz/Videos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer PASTE_AIRTABLE_TOKEN_HERE"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fields\": {\n    \"Topic\": \"{{ $json.fact }}\",\n    \"Script\": \"{{ $json.full_script }}\",\n    \"Title\": \"{{ $json.title }}\",\n    \"Tags\": \"{{ $json.tags.join(', ') }}\",\n    \"SourceURL\": \"{{ $json.source }}\",\n    \"Status\": \"Rendering\",\n    \"CreatedAt\": \"{{ $json.created_at }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "n8",
+      "name": "Airtable Save",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const airtableId = items[0].json.id;\nconst merged = $('Merge All Data').item.json;\nreturn [{ json: {\n  airtable_id: airtableId,\n  title: merged.title,\n  description: merged.description,\n  tags: merged.tags,\n  tiktok_caption: merged.tiktok_caption,\n  hook: merged.hook_rewrite,\n  body: merged.body,\n  cta: merged.cta,\n  full_script: merged.full_script\n}}];"
+      },
+      "id": "n8b",
+      "name": "Save Record ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "PASTE_REMOTION_SERVER_URL_HERE/render",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"hook\": \"{{ $json.hook }}\",\n  \"body\": \"{{ $json.body }}\",\n  \"cta\": \"{{ $json.cta }}\",\n  \"title\": \"{{ $json.title }}\"\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "n9",
+      "name": "Remotion Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = items[0].json;\nif (!result.success) {\n  throw new Error('Remotion render failed: ' + (result.error || 'Unknown error'));\n}\nif (!result.video_base64) {\n  throw new Error('No video data returned from Remotion server');\n}\nconst data = $('Save Record ID').item.json;\nreturn [{ json: {\n  video_base64: result.video_base64,\n  filename: result.filename,\n  title: data.title,\n  description: data.description,\n  tags: data.tags,\n  tiktok_caption: data.tiktok_caption,\n  airtable_id: data.airtable_id\n}}];"
+      },
+      "id": "n10",
+      "name": "Check Render Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $json.title }}",
+        "description": "={{ $json.description }}",
+        "categoryId": "28",
+        "privacyStatus": "public",
+        "madeForKids": false,
+        "tags": "={{ $json.tags }}",
+        "videoInputType": "base64",
+        "videoBase64": "={{ $json.video_base64 }}",
+        "options": {}
+      },
+      "id": "n11",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [2420, 300],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "REPLACE_YOUTUBE_CRED_ID",
+          "name": "YouTube Space Facts"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer PASTE_TIKTOK_TOKEN_HERE"},
+            {"name": "Content-Type", "value": "application/json; charset=UTF-8"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"post_info\": {\n    \"title\": \"{{ $json.tiktok_caption }}\",\n    \"privacy_level\": \"PUBLIC_TO_EVERYONE\",\n    \"disable_duet\": false,\n    \"disable_comment\": false,\n    \"disable_stitch\": false\n  },\n  \"source_info\": {\n    \"source\": \"FILE_UPLOAD\",\n    \"video_size\": {{ $json.video_base64.length }},\n    \"chunk_size\": {{ $json.video_base64.length }},\n    \"total_chunk_count\": 1\n  }\n}",
+        "options": {}
+      },
+      "id": "n12",
+      "name": "TikTok Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appOzlt0lqR510YZz/Videos/{{ $('Check Render Done').item.json.airtable_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer PASTE_AIRTABLE_TOKEN_HERE"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fields\": {\n    \"Status\": \"Done\",\n    \"VideoURL\": \"https://youtube.com/watch?v={{ $node['YouTube Upload'].json.id }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "n13",
+      "name": "Airtable Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {"main": [[{"node": "Gemini Research", "type": "main", "index": 0}]]},
+    "Gemini Research": {"main": [[{"node": "Parse Research", "type": "main", "index": 0}]]},
+    "Parse Research": {"main": [[{"node": "Gemini Script", "type": "main", "index": 0}]]},
+    "Gemini Script": {"main": [[{"node": "Parse Script", "type": "main", "index": 0}]]},
+    "Parse Script": {"main": [[{"node": "Claude SEO", "type": "main", "index": 0}]]},
+    "Claude SEO": {"main": [[{"node": "Merge All Data", "type": "main", "index": 0}]]},
+    "Merge All Data": {"main": [[{"node": "Airtable Save", "type": "main", "index": 0}]]},
+    "Airtable Save": {"main": [[{"node": "Save Record ID", "type": "main", "index": 0}]]},
+    "Save Record ID": {"main": [[{"node": "Remotion Render", "type": "main", "index": 0}]]},
+    "Remotion Render": {"main": [[{"node": "Check Render Done", "type": "main", "index": 0}]]},
+    "Check Render Done": {"main": [[{"node": "YouTube Upload", "type": "main", "index": 0}]]},
+    "YouTube Upload": {"main": [[{"node": "TikTok Upload", "type": "main", "index": 0}]]},
+    "TikTok Upload": {"main": [[{"node": "Airtable Done", "type": "main", "index": 0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  }
+}
